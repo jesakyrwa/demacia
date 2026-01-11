@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Telifsiz Yılan Oyunu</title>
+<style>
+    body {
+        background: radial-gradient(circle, #0f2027, #203a43, #2c5364);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        font-family: Arial, sans-serif;
+        color: white;
+    }
+    canvas {
+        background: #0b0b0b;
+        border: 4px solid #00ff99;
+        box-shadow: 0 0 25px #00ff99;
+    }
+    h1 {
+        position: absolute;
+        top: 20px;
+        color: #00ff99;
+    }
+</style>
+</head>
+<body>
+
+<h1>🐍 Yılan Oyunu</h1>
+<canvas id="game" width="400" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const grid = 20;
+let snake = [{x: 200, y: 200}];
+let food = randomFood();
+let dx = grid;
+let dy = 0;
+let score = 0;
+
+function randomFood() {
+    return {
+        x: Math.floor(Math.random() * 20) * grid,
+        y: Math.floor(Math.random() * 20) * grid
+    };
+}
+
+document.addEventListener("keydown", e => {
+    if (e.key === "ArrowUp" && dy === 0) { dx = 0; dy = -grid; }
+    if (e.key === "ArrowDown" && dy === 0) { dx = 0; dy = grid; }
+    if (e.key === "ArrowLeft" && dx === 0) { dx = -grid; dy = 0; }
+    if (e.key === "ArrowRight" && dx === 0) { dx = grid; dy = 0; }
+});
+
+function gameLoop() {
+    const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+    // Çarpma kontrolü
+    if (
+        head.x < 0 || head.y < 0 ||
+        head.x >= canvas.width || head.y >= canvas.height ||
+        snake.some(s => s.x === head.x && s.y === head.y)
+    ) {
+        alert("Oyun Bitti! Skor: " + score);
+        snake = [{x: 200, y: 200}];
+        dx = grid; dy = 0;
+        score = 0;
+        food = randomFood();
+        return;
+    }
+
+    snake.unshift(head);
+
+    if (head.x === food.x && head.y === food.y) {
+        score++;
+        food = randomFood();
+    } else {
+        snake.pop();
+    }
+
+    draw();
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Yılan
+    snake.forEach((part, i) => {
+        ctx.fillStyle = i === 0 ? "#00ff99" : "#00cc77";
+        ctx.fillRect(part.x, part.y, grid - 2, grid - 2);
+    });
+
+    // Yem
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(food.x + grid/2, food.y + grid/2, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Skor
+    ctx.fillStyle = "white";
+    ctx.font = "14px Arial";
+    ctx.fillText("Skor: " + score, 10, 20);
+}
+
+setInterval(gameLoop, 120);
+</script>
+
+</body>
+</html>
