@@ -2,230 +2,120 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<title>Cryzone Arena</title>
+<title>Three.js FPS Arena</title>
 <style>
-body{
-  margin:0;
-  background:#0b0f14;
-  overflow:hidden;
+body { margin:0; overflow:hidden; background:#000; }
+#info {
+ position:absolute;
+ top:50%;
+ width:100%;
+ text-align:center;
+ color:white;
+ font-family:Arial;
+ cursor:pointer;
 }
-canvas{display:block}
 </style>
 </head>
 <body>
-<canvas id="game"></canvas>
 
-<script>
+<div id="info">Tıklayın – Oyuna Gir</div>
+
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.158/build/three.module.js";
+import { PointerLockControls } from "https://cdn.jsdelivr.net/npm/three@0.158/examples/jsm/controls/PointerLockControls.js";
+
 /* ================= SETUP ================= */
-const canvas=document.getElementById("game");
-const ctx=canvas.getContext("2d");
-canvas.width=innerWidth;
-canvas.height=innerHeight;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0f14);
 
-const keys={}, mouse={x:0,y:0,down:false};
-addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
-addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
-canvas.addEventListener("mousemove",e=>{
- const r=canvas.getBoundingClientRect();
- mouse.x=e.clientX-r.left;
- mouse.y=e.clientY-r.top;
-});
-canvas.addEventListener("mousedown",()=>mouse.down=true);
-canvas.addEventListener("mouseup",()=>mouse.down=false);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
 
-/* ================= CAMERA ================= */
-const camera={x:0,y:0,zoom:1};
+/* ================= LIGHT ================= */
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+dirLight.position.set(5,10,2);
+scene.add(dirLight);
+
+/* ================= CONTROLS ================= */
+const controls = new PointerLockControls(camera, document.body);
+document.getElementById("info").onclick = () => controls.lock();
+controls.addEventListener("lock", ()=>info.style.display="none");
+controls.addEventListener("unlock", ()=>info.style.display="");
+
+scene.add(controls.getObject());
+
+/* ================= FLOOR ================= */
+const floor = new THREE.Mesh(
+ new THREE.PlaneGeometry(200,200),
+ new THREE.MeshStandardMaterial({color:0x111111})
+);
+floor.rotation.x = -Math.PI/2;
+scene.add(floor);
+
+/* ================= WALLS ================= */
+const walls = [];
+function wall(x,z,w,d){
+ const m = new THREE.Mesh(
+  new THREE.BoxGeometry(w,5,d),
+  new THREE.MeshStandardMaterial({color:0x222222})
+ );
+ m.position.set(x,2.5,z);
+ scene.add(m);
+ walls.push(m);
+}
+wall(0,-100,200,5);
+wall(0,100,200,5);
+wall(-100,0,5,200);
+wall(100,0,5,200);
 
 /* ================= PLAYER ================= */
-const player={
- x:0,y:0,r:16,speed:4,
- hp:100,shield:0,
- level:1,score:0,
- weapon:"pistol",cooldown:0
-};
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+const keys = {};
 
-/* ================= WEAPONS ================= */
-const weapons={
- pistol:{rate:15,speed:10,damage:20,spread:0,bullets:1},
- smg:{rate:5,speed:11,damage:8,spread:0.15,bullets:1},
- shotgun:{rate:40,speed:9,damage:10,spread:0.6,bullets:5},
- sniper:{rate:60,speed:15,damage:60,spread:0,bullets:1}
-};
-
-/* ================= ARRAYS ================= */
-let bullets=[], enemies=[], pickups=[];
-
-/* ================= SPAWN ================= */
-function spawnEnemy(){
- enemies.push({
-  x:(Math.random()-0.5)*2000,
-  y:(Math.random()-0.5)*2000,
-  r:14,
-  hp:40+player.level*10,
-  cd:0
- });
-}
-function spawnPickup(){
- const types=["hp","shield","weapon"];
- pickups.push({
-  x:(Math.random()-0.5)*2000,
-  y:(Math.random()-0.5)*2000,
-  type:types[Math.floor(Math.random()*types.length)]
- });
-}
-for(let i=0;i<8;i++) spawnEnemy();
-for(let i=0;i<5;i++) spawnPickup();
+addEventListener("keydown",e=>keys[e.code]=true);
+addEventListener("keyup",e=>keys[e.code]=false);
 
 /* ================= SHOOT ================= */
-function shoot(x,y,a,owner){
- const w=weapons[owner==="player"?player.weapon:"pistol"];
- for(let i=0;i<w.bullets;i++){
-  const angle=a+(Math.random()-0.5)*w.spread;
-  bullets.push({
-   x,y,
-   dx:Math.cos(angle)*w.speed,
-   dy:Math.sin(angle)*w.speed,
-   dmg:w.damage,
-   owner
-  });
+const raycaster = new THREE.Raycaster();
+addEventListener("mousedown",()=>{
+ if(!controls.isLocked) return;
+ raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+ const hits = raycaster.intersectObjects(walls);
+ if(hits.length){
+  hits[0].object.material.color.set(0xff0000);
  }
-}
-
-/* ================= UPDATE ================= */
-function update(){
- /* movement */
- if(keys.w) player.y-=player.speed;
- if(keys.s) player.y+=player.speed;
- if(keys.a) player.x-=player.speed;
- if(keys.d) player.x+=player.speed;
-
- /* shooting */
- if(mouse.down && player.cooldown<=0){
-  const a=Math.atan2(mouse.y-canvas.height/2,mouse.x-canvas.width/2);
-  shoot(player.x,player.y,a,"player");
-  player.cooldown=weapons[player.weapon].rate;
- }
- player.cooldown--;
-
- /* bullets */
- bullets.forEach(b=>{b.x+=b.dx;b.y+=b.dy});
-
- /* enemies */
- enemies.forEach(e=>{
-  const a=Math.atan2(player.y-e.y,player.x-e.x);
-  e.x+=Math.cos(a)*(1.2+player.level*0.1);
-  e.y+=Math.sin(a)*(1.2+player.level*0.1);
-  if(e.cd<=0){
-   shoot(e.x,e.y,a,"enemy");
-   e.cd=80-player.level*5;
-  }
-  e.cd--;
- });
-
- /* collisions */
- bullets.forEach(b=>{
-  if(b.owner==="enemy"){
-   if(Math.hypot(b.x-player.x,b.y-player.y)<player.r){
-    if(player.shield>0) player.shield-=10;
-    else player.hp-=10;
-    b.dead=true;
-   }
-  }else{
-   enemies.forEach(e=>{
-    if(Math.hypot(b.x-e.x,b.y-e.y)<e.r){
-     e.hp-=b.dmg;
-     b.dead=true;
-     if(e.hp<=0){
-      player.score+=10;
-      if(player.score%100===0) player.level++;
-     }
-    }
-   });
-  }
- });
-
- bullets=bullets.filter(b=>!b.dead);
- enemies=enemies.filter(e=>e.hp>0);
-
- /* pickups */
- pickups.forEach(p=>{
-  if(Math.hypot(p.x-player.x,p.y-player.y)<20){
-   if(p.type==="hp") player.hp=Math.min(100,player.hp+30);
-   if(p.type==="shield") player.shield=50;
-   if(p.type==="weapon"){
-    const ws=Object.keys(weapons);
-    player.weapon=ws[Math.floor(Math.random()*ws.length)];
-   }
-   p.dead=true;
-  }
- });
- pickups=pickups.filter(p=>!p.dead);
-
- if(enemies.length<10+player.level) spawnEnemy();
- if(pickups.length<5) spawnPickup();
-
- camera.x=player.x;
- camera.y=player.y;
-
- if(player.hp<=0){
-  alert(`Öldün!\nSkor:${player.score}`);
-  location.reload();
- }
-}
-
-/* ================= DRAW ================= */
-function draw(){
- ctx.setTransform(camera.zoom,0,0,camera.zoom,
-  canvas.width/2-camera.x*camera.zoom,
-  canvas.height/2-camera.y*camera.zoom);
-
- ctx.clearRect(-9999,-9999,20000,20000);
-
- // grid
- ctx.strokeStyle="rgba(255,255,255,.05)";
- for(let i=-2000;i<2000;i+=50){
-  ctx.beginPath();ctx.moveTo(i,-2000);ctx.lineTo(i,2000);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(-2000,i);ctx.lineTo(2000,i);ctx.stroke();
- }
-
- // player
- ctx.fillStyle="#00ffcc";
- ctx.beginPath();ctx.arc(player.x,player.y,player.r,0,Math.PI*2);ctx.fill();
-
- // enemies
- enemies.forEach(e=>{
-  ctx.fillStyle="#ff5555";
-  ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);ctx.fill();
- });
-
- // bullets
- ctx.fillStyle="#fff";
- bullets.forEach(b=>ctx.fillRect(b.x-2,b.y-2,4,4));
-
- // pickups
- pickups.forEach(p=>{
-  ctx.fillStyle=p.type==="hp"?"red":p.type==="shield"?"cyan":"gold";
-  ctx.beginPath();ctx.arc(p.x,p.y,10,0,Math.PI*2);ctx.fill();
- });
-
- ctx.setTransform(1,0,0,1,0,0);
-
- // UI
- ctx.fillStyle="white";
- ctx.fillText(`HP:${player.hp}`,20,30);
- ctx.fillText(`Shield:${player.shield}`,20,45);
- ctx.fillText(`Weapon:${player.weapon}`,20,60);
- ctx.fillText(`Score:${player.score}`,20,75);
- ctx.fillText(`Level:${player.level}`,20,90);
-}
+});
 
 /* ================= LOOP ================= */
-function loop(){
- update();
- draw();
- requestAnimationFrame(loop);
+let prev = performance.now();
+
+function animate(){
+ requestAnimationFrame(animate);
+ const now = performance.now();
+ const delta = (now-prev)/1000;
+ prev = now;
+
+ velocity.x -= velocity.x * 10 * delta;
+ velocity.z -= velocity.z * 10 * delta;
+
+ direction.z = Number(keys["KeyW"]) - Number(keys["KeyS"]);
+ direction.x = Number(keys["KeyD"]) - Number(keys["KeyA"]);
+ direction.normalize();
+
+ if(keys["KeyW"]||keys["KeyS"]) velocity.z -= direction.z * 40 * delta;
+ if(keys["KeyA"]||keys["KeyD"]) velocity.x -= direction.x * 40 * delta;
+
+ controls.moveRight(-velocity.x * delta);
+ controls.moveForward(-velocity.z * delta);
+
+ renderer.render(scene, camera);
 }
-loop();
+
+animate();
 </script>
 </body>
 </html>
