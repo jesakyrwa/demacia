@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>MOBA Şampiyon Hasar Hesaplayıcı</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+    <h1>⚔️ Şampiyon Hasar Hesaplayıcı</h1>
+
+    <select id="champion" onchange="changeTheme()">
+        <option value="assassin">Suikastçı</option>
+        <option value="mage">Büyücü</option>
+        <option value="marksman">Nişancı</option>
+    </select>
+
+    <div class="stat">
+        <label>AD (Saldırı Gücü)</label>
+        <input type="number" id="ad" value="100">
+    </div>
+
+    <div class="stat">
+        <label>AP (Yetenek Gücü)</label>
+        <input type="number" id="ap" value="200">
+    </div>
+
+    <div class="stat">
+        <label>Kritik Şansı (%)</label>
+        <input type="number" id="critChance" value="20">
+    </div>
+
+    <div class="stat">
+        <label>Kritik Hasar (%)</label>
+        <input type="number" id="critDamage" value="175">
+    </div>
+
+    <button onclick="calculate()">HESAPLA</button>
+
+    <div class="result" id="result"></div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
