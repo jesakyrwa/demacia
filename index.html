@@ -5,7 +5,7 @@
 <title>Yılan Oyunu</title>
 <style>
 :root {
-    --bg: #0b0b0b;
+    --bg: #000;
     --snake: #00ff99;
     --snake-body: #00cc77;
     --food: red;
@@ -22,16 +22,12 @@ body {
     align-items: center;
 }
 
-h1 {
-    margin: 10px;
-}
+h1 { margin: 10px; }
 
-.controls {
-    margin-bottom: 10px;
-}
+.controls { margin-bottom: 10px; }
 
-select {
-    padding: 5px;
+button, select {
+    padding: 6px;
     border-radius: 6px;
 }
 
@@ -39,6 +35,7 @@ canvas {
     background: var(--bg);
     border: 4px solid var(--border);
     box-shadow: 0 0 25px var(--border);
+    display: none;
 }
 </style>
 </head>
@@ -53,6 +50,7 @@ canvas {
         <option value="retro">Retro</option>
         <option value="dark">Dark</option>
     </select>
+    <button onclick="startGame()">▶ Başla</button>
 </div>
 
 <canvas id="game" width="400" height="400"></canvas>
@@ -62,12 +60,19 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const grid = 20;
 
-let snake, food, dx, dy, score;
+let snake, food, dx, dy, score, gameInterval;
 let highScore = localStorage.getItem("snakeHighScore") || 0;
+let audioCtx = null;
 
-// 🎵 Telifsiz ses (Web Audio)
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// 🔊 Ses artık kullanıcı etkileşimiyle başlar
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
 function playSound(freq, duration = 0.1) {
+    if (!audioCtx) return;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.frequency.value = freq;
@@ -77,6 +82,14 @@ function playSound(freq, duration = 0.1) {
     gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
     osc.stop(audioCtx.currentTime + duration);
+}
+
+function startGame() {
+    initAudio();
+    canvas.style.display = "block";
+    resetGame();
+    clearInterval(gameInterval);
+    gameInterval = setInterval(gameLoop, 120);
 }
 
 function resetGame() {
@@ -103,26 +116,22 @@ document.addEventListener("keydown", e => {
 
 function setTheme(theme) {
     if (theme === "neon") {
-        document.documentElement.style.setProperty("--bg", "#000");
-        document.documentElement.style.setProperty("--snake", "#00ff99");
-        document.documentElement.style.setProperty("--snake-body", "#00cc77");
-        document.documentElement.style.setProperty("--food", "red");
-        document.documentElement.style.setProperty("--border", "#00ff99");
+        setVars("#000", "#00ff99", "#00cc77", "red", "#00ff99");
     }
     if (theme === "retro") {
-        document.documentElement.style.setProperty("--bg", "#2b2b2b");
-        document.documentElement.style.setProperty("--snake", "#f4f142");
-        document.documentElement.style.setProperty("--snake-body", "#c9be3a");
-        document.documentElement.style.setProperty("--food", "#ff8c00");
-        document.documentElement.style.setProperty("--border", "#f4f142");
+        setVars("#2b2b2b", "#f4f142", "#c9be3a", "#ff8c00", "#f4f142");
     }
     if (theme === "dark") {
-        document.documentElement.style.setProperty("--bg", "#050505");
-        document.documentElement.style.setProperty("--snake", "#ffffff");
-        document.documentElement.style.setProperty("--snake-body", "#aaaaaa");
-        document.documentElement.style.setProperty("--food", "#ff4444");
-        document.documentElement.style.setProperty("--border", "#ffffff");
+        setVars("#050505", "#fff", "#aaa", "#ff4444", "#fff");
     }
+}
+
+function setVars(bg, s, sb, f, b) {
+    document.documentElement.style.setProperty("--bg", bg);
+    document.documentElement.style.setProperty("--snake", s);
+    document.documentElement.style.setProperty("--snake-body", sb);
+    document.documentElement.style.setProperty("--food", f);
+    document.documentElement.style.setProperty("--border", b);
 }
 
 function gameLoop() {
@@ -138,8 +147,8 @@ function gameLoop() {
             highScore = score;
             localStorage.setItem("snakeHighScore", highScore);
         }
-        alert("Oyun Bitti!\nSkor: " + score + "\nEn Yüksek Skor: " + highScore);
-        resetGame();
+        alert(`Oyun Bitti!\nSkor: ${score}\nEn Yüksek: ${highScore}`);
+        startGame();
         return;
     }
 
@@ -161,12 +170,12 @@ function draw() {
 
     snake.forEach((p, i) => {
         ctx.fillStyle = i === 0
-            ? getComputedStyle(document.documentElement).getPropertyValue("--snake")
-            : getComputedStyle(document.documentElement).getPropertyValue("--snake-body");
+            ? getVar("--snake")
+            : getVar("--snake-body");
         ctx.fillRect(p.x, p.y, grid - 2, grid - 2);
     });
 
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--food");
+    ctx.fillStyle = getVar("--food");
     ctx.beginPath();
     ctx.arc(food.x + grid/2, food.y + grid/2, 6, 0, Math.PI * 2);
     ctx.fill();
@@ -177,9 +186,11 @@ function draw() {
     ctx.fillText("En Yüksek: " + highScore, 10, 34);
 }
 
-resetGame();
+function getVar(v) {
+    return getComputedStyle(document.documentElement).getPropertyValue(v);
+}
+
 setTheme("neon");
-setInterval(gameLoop, 120);
 </script>
 
 </body>
