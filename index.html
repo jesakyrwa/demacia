@@ -2,197 +2,186 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<title>Pro Yılan Oyunu</title>
+<title>Cryzone Arena</title>
 <style>
-:root{
-  --bg1:#0f2027;
-  --bg2:#203a43;
-  --bg3:#2c5364;
-  --snake:#3aff7a;
-  --food:#ff4d4d;
-}
-
 body{
   margin:0;
-  min-height:100vh;
-  background: radial-gradient(circle at top,var(--bg1),var(--bg2),var(--bg3));
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  color:#fff;
-  font-family:Arial,sans-serif;
+  background:radial-gradient(circle at top,#0f2027,#203a43,#2c5364);
+  overflow:hidden;
 }
-
-h1{margin:10px}
-
-.controls{margin-bottom:10px}
-
-button,select{
-  padding:6px 10px;
-  border-radius:6px;
-  border:none;
-  cursor:pointer;
-}
-
 canvas{
-  background:rgba(0,0,0,.6);
-  border-radius:12px;
-  box-shadow:0 0 30px rgba(0,0,0,.8);
-  display:none;
+  display:block;
 }
 </style>
 </head>
 <body>
-
-<h1>🐍 Pro Yılan Oyunu</h1>
-
-<div class="controls">
-  <button onclick="startGame()">▶ Başla</button>
-</div>
-
-<canvas id="game" width="420" height="420"></canvas>
+<canvas id="game"></canvas>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-const grid = 20;
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+canvas.width=window.innerWidth;
+canvas.height=window.innerHeight;
 
-let snake, food, dx, dy, score, speed, loop;
-let highScore = localStorage.getItem("snakeHighScore") || 0;
-let audioCtx, musicOsc;
+const keys={};
+let mouse={x:0,y:0,down:false};
 
-// 🔊 SESLER
-function initAudio(){
-  if(audioCtx) return;
-  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-
-  // Arka plan müziği (soft wave)
-  musicOsc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  musicOsc.type="sine";
-  musicOsc.frequency.value=110;
-  gain.gain.value=0.03;
-  musicOsc.connect(gain).connect(audioCtx.destination);
-  musicOsc.start();
-}
-
-function beep(freq,d=0.1){
-  if(!audioCtx) return;
-  const o=audioCtx.createOscillator();
-  const g=audioCtx.createGain();
-  o.frequency.value=freq;
-  o.connect(g).connect(audioCtx.destination);
-  g.gain.value=0.15;
-  o.start();
-  g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+d);
-  o.stop(audioCtx.currentTime+d);
-}
-
-// 🎮 OYUN
-function startGame(){
-  initAudio();
-  canvas.style.display="block";
-  snake=[{x:200,y:200}];
-  dx=grid; dy=0;
-  score=0;
-  speed=120;
-  food=randomFood();
-  clearInterval(loop);
-  loop=setInterval(gameLoop,speed);
-}
-
-function randomFood(){
-  return{
-    x:Math.floor(Math.random()*21)*grid,
-    y:Math.floor(Math.random()*21)*grid
-  }
-}
-
-document.addEventListener("keydown",e=>{
-  if(e.key==="ArrowUp"&&dy===0){dx=0;dy=-grid}
-  if(e.key==="ArrowDown"&&dy===0){dx=0;dy=grid}
-  if(e.key==="ArrowLeft"&&dx===0){dx=-grid;dy=0}
-  if(e.key==="ArrowRight"&&dx===0){dx=grid;dy=0}
+document.addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
+document.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+canvas.addEventListener("mousemove",e=>{
+  const r=canvas.getBoundingClientRect();
+  mouse.x=e.clientX-r.left;
+  mouse.y=e.clientY-r.top;
 });
+canvas.addEventListener("mousedown",()=>mouse.down=true);
+canvas.addEventListener("mouseup",()=>mouse.down=false);
 
-function gameLoop(){
-  let head={x:snake[0].x+dx,y:snake[0].y+dy};
+// ---------- PLAYER ----------
+const player={
+  x:canvas.width/2,
+  y:canvas.height/2,
+  r:15,
+  speed:4,
+  hp:100
+};
 
-  // DUVARLARDAN GEÇİŞ
-  if(head.x<0) head.x=canvas.width-grid;
-  if(head.y<0) head.y=canvas.height-grid;
-  if(head.x>=canvas.width) head.x=0;
-  if(head.y>=canvas.height) head.y=0;
+// ---------- BULLETS ----------
+let bullets=[];
+function shoot(x,y,angle,owner){
+  bullets.push({
+    x,y,
+    dx:Math.cos(angle)*10,
+    dy:Math.sin(angle)*10,
+    owner
+  });
+}
 
-  // KENDİNE ÇARPMA
-  if(snake.some(s=>s.x===head.x&&s.y===head.y)){
-    beep(120,.3);
-    if(score>highScore){
-      highScore=score;
-      localStorage.setItem("snakeHighScore",highScore);
+// ---------- ENEMIES ----------
+let enemies=[];
+function spawnEnemy(){
+  enemies.push({
+    x:Math.random()*canvas.width,
+    y:Math.random()*canvas.height,
+    r:14,
+    hp:50,
+    cd:0
+  });
+}
+for(let i=0;i<6;i++) spawnEnemy();
+
+// ---------- GAME LOOP ----------
+function update(){
+  // movement
+  if(keys.w) player.y-=player.speed;
+  if(keys.s) player.y+=player.speed;
+  if(keys.a) player.x-=player.speed;
+  if(keys.d) player.x+=player.speed;
+
+  // shooting
+  if(mouse.down){
+    const a=Math.atan2(mouse.y-player.y,mouse.x-player.x);
+    if(!player.cooldown){
+      shoot(player.x,player.y,a,"player");
+      player.cooldown=10;
     }
-    alert(`Oyun Bitti!\nSkor:${score}\nRekor:${highScore}`);
-    startGame();
-    return;
   }
+  if(player.cooldown) player.cooldown--;
 
-  snake.unshift(head);
+  // bullets
+  bullets.forEach(b=>{
+    b.x+=b.dx;
+    b.y+=b.dy;
+  });
+  bullets=bullets.filter(b=>
+    b.x>0&&b.y>0&&b.x<canvas.width&&b.y<canvas.height
+  );
 
-  if(head.x===food.x&&head.y===food.y){
-    score++;
-    beep(600);
-    food=randomFood();
-    if(speed>60){
-      speed-=5;
-      clearInterval(loop);
-      loop=setInterval(gameLoop,speed);
+  // enemies AI
+  enemies.forEach(e=>{
+    const a=Math.atan2(player.y-e.y,player.x-e.x);
+    e.x+=Math.cos(a)*1.5;
+    e.y+=Math.sin(a)*1.5;
+
+    if(e.cd<=0){
+      shoot(e.x,e.y,a,"enemy");
+      e.cd=60;
     }
-  }else{
-    snake.pop();
-  }
+    e.cd--;
+  });
 
-  draw();
+  // collisions
+  bullets.forEach(b=>{
+    if(b.owner==="enemy"){
+      const d=Math.hypot(b.x-player.x,b.y-player.y);
+      if(d<player.r){
+        player.hp-=10;
+        b.dead=true;
+      }
+    }else{
+      enemies.forEach(e=>{
+        const d=Math.hypot(b.x-e.x,b.y-e.y);
+        if(d<e.r){
+          e.hp-=20;
+          b.dead=true;
+        }
+      });
+    }
+  });
+
+  bullets=bullets.filter(b=>!b.dead);
+  enemies=enemies.filter(e=>e.hp>0);
+
+  if(enemies.length<6) spawnEnemy();
+
+  if(player.hp<=0){
+    alert("Öldün!");
+    location.reload();
+  }
 }
 
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // GRID ARKA PLAN
-  ctx.strokeStyle="rgba(255,255,255,.05)";
-  for(let i=0;i<canvas.width;i+=grid){
+  // arena grid
+  ctx.strokeStyle="rgba(255,255,255,0.05)";
+  for(let i=0;i<canvas.width;i+=50){
     ctx.beginPath();
     ctx.moveTo(i,0);
     ctx.lineTo(i,canvas.height);
     ctx.stroke();
   }
 
-  // YILAN
-  snake.forEach((p,i)=>{
-    ctx.beginPath();
-    ctx.fillStyle=i===0?"#6aff9f":"#2ecc71";
-    ctx.arc(p.x+grid/2,p.y+grid/2,grid/2-2,0,Math.PI*2);
-    ctx.fill();
-
-    // GÖZ
-    if(i===0){
-      ctx.fillStyle="#000";
-      ctx.beginPath();
-      ctx.arc(p.x+grid/2+3,p.y+grid/2-3,2,0,Math.PI*2);
-      ctx.fill();
-    }
-  });
-
-  // YEM (ELMA BENZERİ)
+  // player
   ctx.beginPath();
-  ctx.fillStyle="#ff4d4d";
-  ctx.arc(food.x+grid/2,food.y+grid/2,grid/2-3,0,Math.PI*2);
+  ctx.fillStyle="#00ffcc";
+  ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
   ctx.fill();
 
+  // enemies
+  enemies.forEach(e=>{
+    ctx.beginPath();
+    ctx.fillStyle="#ff5555";
+    ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  // bullets
   ctx.fillStyle="#fff";
-  ctx.font="14px Arial";
-  ctx.fillText("Skor: "+score,10,18);
-  ctx.fillText("Rekor: "+highScore,10,34);
+  bullets.forEach(b=>{
+    ctx.fillRect(b.x-2,b.y-2,4,4);
+  });
+
+  // UI
+  ctx.fillStyle="white";
+  ctx.fillText("HP: "+player.hp,20,30);
 }
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
 </script>
 </body>
 </html>
